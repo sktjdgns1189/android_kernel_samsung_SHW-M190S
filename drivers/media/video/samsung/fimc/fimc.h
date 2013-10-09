@@ -65,10 +65,7 @@
 #define FIMC_SCLK		1
 #define FIMC_OVLY_MODE FIMC_OVLY_DMA_AUTO
 
-#define PINGPONG_2ADDR_MODE
-#if defined(PINGPONG_2ADDR_MODE)
 #define FIMC_PINGPONG 2
-#endif
 
 /*
  * ENUMERATIONS
@@ -370,6 +367,7 @@ struct fimc_effect {
 /* fimc controller abstration */
 struct fimc_control {
 	int				id;		/* controller id */
+	int				capture_mode;	
 	char				name[16];
 	atomic_t			in_use;
 	void __iomem			*regs;		/* register i/o */
@@ -385,6 +383,9 @@ struct fimc_control {
 	struct device			*dev;
 	int				irq;
 
+	/* P1 */
+	int				vt_mode;
+	
 	/* v4l2 related */
 	struct video_device		*vd;
 	struct v4l2_device		v4l2_dev;

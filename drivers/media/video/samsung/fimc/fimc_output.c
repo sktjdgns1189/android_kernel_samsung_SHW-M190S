@@ -16,7 +16,11 @@
 #include <linux/platform_device.h>
 #include <linux/mm.h>
 #include <linux/videodev2.h>
+#ifdef CONFIG_MACH_FORTE
+#include <linux/videodev2_samsung_forte.h>
+#else
 #include <linux/videodev2_samsung.h>
+#endif // CONFIG_MACH_FORTE
 #include <media/videobuf-core.h>
 #include <linux/io.h>
 #include <linux/uaccess.h>
@@ -1504,7 +1508,7 @@ int fimc_s_ctrl_output(struct file *filp, void *fh, struct v4l2_control *c)
 		ret = fimc_set_dst_info(ctrl, ctx,
 					(struct fimc_buf *)c->value);
 		break;
-		
+
 	case V4L2_CID_GET_PHY_SRC_YADDR:
 		c->value = ctx->src[c->value].base[FIMC_ADDR_Y];
 		break;
@@ -1512,7 +1516,7 @@ int fimc_s_ctrl_output(struct file *filp, void *fh, struct v4l2_control *c)
 	case V4L2_CID_GET_PHY_SRC_CADDR:
 		c->value = ctx->src[c->value].base[FIMC_ADDR_CB];
 		break;
-		
+
 	default:
 		fimc_err("Invalid control id: %d\n", c->id);
 		ret = -EINVAL;

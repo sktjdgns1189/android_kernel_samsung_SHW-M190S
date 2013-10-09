@@ -305,7 +305,12 @@ int fimc_s_fbuf(struct file *filp, void *fh, struct v4l2_framebuffer *fb)
 			fimc_err("%s: fb[%d] is already being used. " \
 					"must be not used for overlay\n",
 					__func__, ctrl->id);
+					
+// Workaround : Prevent "already being used" error in overlay.(by jung-min.oh(S.LSI))
+// Camera or Videoplayer failed to create the overlay when the application started. 
+#if 0 
 			return -1;
+#endif			
 		}
 
 		ctx->overlay.mode = FIMC_OVLY_NOT_FIXED;

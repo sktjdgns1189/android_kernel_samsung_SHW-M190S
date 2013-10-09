@@ -32,7 +32,11 @@
 #include <plat/media.h>
 #include <mach/media.h>
 #include <plat/fimc.h>
+#ifdef CONFIG_MACH_FORTE
+#include <linux/videodev2_samsung_forte.h>
+#else
 #include <linux/videodev2_samsung.h>
+#endif // CONFIG_MACH_FORTE
 #include <linux/delay.h>
 #include <plat/regs-fimc.h>
 
@@ -361,6 +365,10 @@ static inline u32 fimc_irq_out_fimd(struct fimc_control *ctrl,
 	return wakeup;
 }
 
+#ifdef CONFIG_S5PV210_GARNETT_DELTA
+extern char image_update;
+#endif
+
 static inline void fimc_irq_out(struct fimc_control *ctrl)
 {
 	struct fimc_ctx *ctx;
@@ -380,6 +388,9 @@ static inline void fimc_irq_out(struct fimc_control *ctrl)
 		break;
 	case FIMC_OVLY_DMA_AUTO:	/* fall through */
 	case FIMC_OVLY_DMA_MANUAL:
+#ifdef CONFIG_S5PV210_GARNETT_DELTA		
+		image_update = 1;
+#endif
 		wakeup = fimc_irq_out_dma(ctrl, ctx);
 		break;
 	default:
@@ -398,6 +409,8 @@ static inline void fimc_irq_cap(struct fimc_control *ctrl)
 
 	fimc_hwset_clear_irq(ctrl);
 	if (fimc_hwget_overflow_state(ctrl)) {
+#if 0 // cmk 2011.07.20 Remove ESD Codes to prevent lockup when scrolling the phone option menu while recording.
+      // msleep code and s/w reset codes can cause 100% lockup.
 		/* s/w reset -- added for recovering module in ESD state*/
 		cfg = readl(ctrl->regs + S3C_CIGCTRL);
 		cfg |= (S3C_CIGCTRL_SWRST);
@@ -407,6 +420,11 @@ static inline void fimc_irq_cap(struct fimc_control *ctrl)
 		cfg = readl(ctrl->regs + S3C_CIGCTRL);
 		cfg &= ~S3C_CIGCTRL_SWRST;
 		writel(cfg, ctrl->regs + S3C_CIGCTRL);
+#else
+        fimc_warn("%s: Warning! fimc overflow occurred!!\n", __func__);
+        
+        return;  // Recommended code by seuni.park(LSI s/w solution, 2011.07.20).
+#endif // !CONFIG_TIKAL_USCC
 	}
 	pp = ((fimc_hwget_frame_count(ctrl) + 2) % 4);
 	if (cap->fmt.field == V4L2_FIELD_INTERLACED_TB) {
@@ -1087,23 +1105,6 @@ static int fimc_release(struct file *filp)
 					fimc_err("%s: do_munmap fail\n", \
 							__func__);
 			}
-		}
-
-		/*
-	 	 * Close window for FIMC if window is enabled.
-		 */
-		if (ctx->overlay.mode == FIMC_OVLY_DMA_AUTO &&
-				ctrl->fb.is_enable == 1) {
-			fimc_warn("WIN_OFF for FIMC%d %d\n", ctrl->id, ctx->overlay.fb_id);
-			ret = fb_blank(registered_fb[ctx->overlay.fb_id],
-						FB_BLANK_POWERDOWN);
-			if (ret < 0) {
-				fimc_err("%s: fb_blank: fb[%d] " \
-					"mode=FB_BLANK_POWERDOWN\n",
-					__func__, ctx->overlay.fb_id);
-			}
-
-			ctrl->fb.is_enable = 0;
 		}
 
 		memset(ctx, 0x00, sizeof(struct fimc_ctx));
