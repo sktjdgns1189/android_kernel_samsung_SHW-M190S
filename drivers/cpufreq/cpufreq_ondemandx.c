@@ -1,5 +1,5 @@
 /*
- *  drivers/cpufreq/cpufreq_ondemand.c
+ *  drivers/cpufreq/cpufreq_ondemandx.c
  *
  *  Copyright (C)  2001 Russell King
  *            (C)  2003 Venkatesh Pallipadi <venkatesh.pallipadi@intel.com>.
@@ -22,6 +22,7 @@
 #include <linux/tick.h>
 #include <linux/ktime.h>
 #include <linux/sched.h>
+#include <linux/earlysuspend.h>
 
 /*
  * dbs is used in this file as a shortform for demandbased switching
@@ -52,6 +53,8 @@
 
 static unsigned int min_sampling_rate;
 
+static unsigned int suspendfreq = 200000;
+
 #define LATENCY_MULTIPLIER			(1000)
 #define MIN_LATENCY_MULTIPLIER			(100)
 #define TRANSITION_LATENCY_LIMIT		(10 * 1000 * 1000)
@@ -60,11 +63,11 @@ static void do_dbs_timer(struct work_struct *work);
 static int cpufreq_governor_dbs(struct cpufreq_policy *policy,
 				unsigned int event);
 
-#ifndef CONFIG_CPU_FREQ_DEFAULT_GOV_ONDEMAND
+#ifndef CONFIG_CPU_FREQ_DEFAULT_GOV_ONDEMANDX
 static
 #endif
-struct cpufreq_governor cpufreq_gov_ondemand = {
-       .name                   = "ondemand",
+struct cpufreq_governor cpufreq_gov_ondemandx = {
+       .name                   = "ondemandX",
        .governor               = cpufreq_governor_dbs,
        .max_transition_latency = TRANSITION_LATENCY_LIMIT,
        .owner                  = THIS_MODULE,
@@ -93,21 +96,48 @@ struct cpu_dbs_info_s {
 	 * when user is changing the governor or limits.
 	 */
 	struct mutex timer_mutex;
-#ifdef CONFIG_CPU_FREQ_GOV_ONDEMAND_FLEXRATE
-	unsigned int flex_duration;
-#endif
 };
 static DEFINE_PER_CPU(struct cpu_dbs_info_s, od_cpu_dbs_info);
 
-static unsigned int dbs_enable;	/* number of CPUs using this policy */
+static unsigned int dbs_enable=0;	/* number of CPUs using this policy */
+
+// used for imoseyon's mods
+static unsigned int suspended = 0;
+static void ondemandx_suspend(int suspend)
+{
+        struct cpu_dbs_info_s *dbs_info = &per_cpu(od_cpu_dbs_info, smp_processor_id());
+        if (dbs_enable==0) return;
+        if (!suspend) { // resume at max speed:
+                suspended = 0;
+                __cpufreq_driver_target(dbs_info->cur_policy, dbs_info->cur_policy->max, 
+			CPUFREQ_RELATION_L);
+                pr_info("[imoseyon] ondemandx awake at %d\n", dbs_info->cur_policy->cur);
+        } else {
+                suspended = 1;
+		// let's give it a little breathing room
+                __cpufreq_driver_target(dbs_info->cur_policy, suspendfreq, CPUFREQ_RELATION_H);
+                pr_info("[imoseyon] ondemandx suspended at %d\n", dbs_info->cur_policy->cur);
+        }
+}
+
+static void ondemandx_early_suspend(struct early_suspend *handler) {
+       ondemandx_suspend(1);
+}
+
+static void ondemandx_late_resume(struct early_suspend *handler) {
+       ondemandx_suspend(0);
+}
+
+static struct early_suspend ondemandx_power_suspend = {
+        .suspend = ondemandx_early_suspend,
+        .resume = ondemandx_late_resume,
+        .level = EARLY_SUSPEND_LEVEL_DISABLE_FB + 1,
+};
 
 /*
  * dbs_mutex protects dbs_enable in governor start/stop.
  */
 static DEFINE_MUTEX(dbs_mutex);
-#ifdef CONFIG_CPU_FREQ_GOV_ONDEMAND_FLEXRATE
-static DEFINE_MUTEX(flex_mutex);
-#endif
 
 static struct dbs_tuners {
 	unsigned int sampling_rate;
@@ -117,18 +147,12 @@ static struct dbs_tuners {
 	unsigned int sampling_down_factor;
 	unsigned int powersave_bias;
 	unsigned int io_is_busy;
-	unsigned int freq_step;
-#ifdef CONFIG_CPU_FREQ_GOV_ONDEMAND_FLEXRATE
-	unsigned int flex_sampling_rate;
-	unsigned int flex_duration;
-#endif
 } dbs_tuners_ins = {
 	.up_threshold = DEF_FREQUENCY_UP_THRESHOLD,
 	.sampling_down_factor = DEF_SAMPLING_DOWN_FACTOR,
 	.down_differential = DEF_FREQUENCY_DOWN_DIFFERENTIAL,
 	.ignore_nice = 0,
 	.powersave_bias = 0,
-	.freq_step = 100,
 };
 
 static inline cputime64_t get_cpu_idle_time_jiffy(unsigned int cpu,
@@ -229,18 +253,18 @@ static unsigned int powersave_bias_target(struct cpufreq_policy *policy,
 	return freq_hi;
 }
 
-static void ondemand_powersave_bias_init_cpu(int cpu)
+static void ondemandx_powersave_bias_init_cpu(int cpu)
 {
 	struct cpu_dbs_info_s *dbs_info = &per_cpu(od_cpu_dbs_info, cpu);
 	dbs_info->freq_table = cpufreq_frequency_get_table(cpu);
 	dbs_info->freq_lo = 0;
 }
 
-static void ondemand_powersave_bias_init(void)
+static void ondemandx_powersave_bias_init(void)
 {
 	int i;
 	for_each_online_cpu(i) {
-		ondemand_powersave_bias_init_cpu(i);
+		ondemandx_powersave_bias_init_cpu(i);
 	}
 }
 
@@ -254,7 +278,7 @@ static ssize_t show_sampling_rate_min(struct kobject *kobj,
 
 define_one_global_ro(sampling_rate_min);
 
-/* cpufreq_ondemand Governor Tunables */
+/* cpufreq_ondemandx Governor Tunables */
 #define show_one(file_name, object)					\
 static ssize_t show_##file_name						\
 (struct kobject *kobj, struct attribute *attr, char *buf)              \
@@ -267,8 +291,6 @@ show_one(up_threshold, up_threshold);
 show_one(sampling_down_factor, sampling_down_factor);
 show_one(ignore_nice_load, ignore_nice);
 show_one(powersave_bias, powersave_bias);
-show_one(down_differential, down_differential);
-show_one(freq_step, freq_step);
 
 static ssize_t store_sampling_rate(struct kobject *a, struct attribute *b,
 				   const char *buf, size_t count)
@@ -377,34 +399,9 @@ static ssize_t store_powersave_bias(struct kobject *a, struct attribute *b,
 		input = 1000;
 
 	dbs_tuners_ins.powersave_bias = input;
-	ondemand_powersave_bias_init();
+	ondemandx_powersave_bias_init();
 	return count;
 }
-
-static ssize_t store_down_differential(struct kobject *a, struct attribute *b,
-				   const char *buf, size_t count)
-{
-	unsigned int input;
-	int ret;
-	ret = sscanf(buf, "%u", &input);
-	if (ret != 1)
-		return -EINVAL;
-	dbs_tuners_ins.down_differential = min(input, 100u);
-	return count;
-}
-
-static ssize_t store_freq_step(struct kobject *a, struct attribute *b,
-				   const char *buf, size_t count)
-{
-	unsigned int input;
-	int ret;
-	ret = sscanf(buf, "%u", &input);
-	if (ret != 1)
-		return -EINVAL;
-	dbs_tuners_ins.freq_step = min(input, 100u);
-	return count;
-}
-
 
 define_one_global_rw(sampling_rate);
 define_one_global_rw(io_is_busy);
@@ -412,15 +409,6 @@ define_one_global_rw(up_threshold);
 define_one_global_rw(sampling_down_factor);
 define_one_global_rw(ignore_nice_load);
 define_one_global_rw(powersave_bias);
-define_one_global_rw(down_differential);
-define_one_global_rw(freq_step);
-#ifdef CONFIG_CPU_FREQ_GOV_ONDEMAND_FLEXRATE
-static struct global_attr flexrate_request;
-static struct global_attr flexrate_duration;
-static struct global_attr flexrate_enable;
-static struct global_attr flexrate_forcerate;
-static struct global_attr flexrate_num_effective_usage;
-#endif
 
 static struct attribute *dbs_attributes[] = {
 	&sampling_rate_min.attr,
@@ -430,21 +418,12 @@ static struct attribute *dbs_attributes[] = {
 	&ignore_nice_load.attr,
 	&powersave_bias.attr,
 	&io_is_busy.attr,
-	&down_differential.attr,
-	&freq_step.attr,
-#ifdef CONFIG_CPU_FREQ_GOV_ONDEMAND_FLEXRATE
-	&flexrate_request.attr,
-	&flexrate_duration.attr,
-	&flexrate_enable.attr,
-	&flexrate_forcerate.attr,
-	&flexrate_num_effective_usage.attr,
-#endif
 	NULL
 };
 
 static struct attribute_group dbs_attr_group = {
 	.attrs = dbs_attributes,
-	.name = "ondemand",
+	.name = "ondemandx",
 };
 
 /************************** sysfs end ************************/
@@ -455,9 +434,12 @@ static void dbs_freq_increase(struct cpufreq_policy *p, unsigned int freq)
 		freq = powersave_bias_target(p, freq, CPUFREQ_RELATION_H);
 	else if (p->cur == p->max)
 		return;
-
-	__cpufreq_driver_target(p, freq, dbs_tuners_ins.powersave_bias ?
-			CPUFREQ_RELATION_L : CPUFREQ_RELATION_H);
+	if (suspended && freq > suspendfreq) {
+	     freq = suspendfreq;
+	     __cpufreq_driver_target(p, freq, CPUFREQ_RELATION_H);
+	} else
+	    __cpufreq_driver_target(p, freq, dbs_tuners_ins.powersave_bias ?
+                        CPUFREQ_RELATION_L : CPUFREQ_RELATION_H);
 }
 
 static void dbs_check_cpu(struct cpu_dbs_info_s *this_dbs_info)
@@ -527,7 +509,7 @@ static void dbs_check_cpu(struct cpu_dbs_info_s *this_dbs_info)
 		}
 
 		/*
-		 * For the purpose of ondemand, waiting for disk IO is an
+		 * For the purpose of ondemandx, waiting for disk IO is an
 		 * indication that you're performance critical, and not that
 		 * the system is actually idle. So subtract the iowait time
 		 * from the cpu idle time.
@@ -552,13 +534,11 @@ static void dbs_check_cpu(struct cpu_dbs_info_s *this_dbs_info)
 
 	/* Check for frequency increase */
 	if (max_load_freq > dbs_tuners_ins.up_threshold * policy->cur) {
-		int inc = (policy->max * dbs_tuners_ins.freq_step) / 100;
-		int target = min(policy->max, policy->cur + inc);
 		/* If switching to max speed, apply sampling_down_factor */
-		if (policy->cur < policy->max && target == policy->max)
+		if (policy->cur < policy->max)
 			this_dbs_info->rate_mult =
 				dbs_tuners_ins.sampling_down_factor;
-		dbs_freq_increase(policy, target);
+		dbs_freq_increase(policy, policy->max);
 		return;
 	}
 
@@ -629,27 +609,11 @@ static void do_dbs_timer(struct work_struct *work)
 				delay -= jiffies % delay;
 		}
 	} else {
+	    if (!suspended) 
 		__cpufreq_driver_target(dbs_info->cur_policy,
 			dbs_info->freq_lo, CPUFREQ_RELATION_H);
-		delay = dbs_info->freq_lo_jiffies;
+	    delay = dbs_info->freq_lo_jiffies;
 	}
-#ifdef CONFIG_CPU_FREQ_GOV_ONDEMAND_FLEXRATE
-	if (dbs_info->flex_duration) {
-		struct cpufreq_policy *policy = dbs_info->cur_policy;
-
-		mutex_lock(&flex_mutex);
-		delay = usecs_to_jiffies(dbs_tuners_ins.flex_sampling_rate);
-
-		/* If it's already max, we don't need to iterate fast */
-		if (policy->cur >= policy->max)
-			dbs_info->flex_duration = 1;
-
-		if (--dbs_info->flex_duration < dbs_tuners_ins.flex_duration) {
-			dbs_tuners_ins.flex_duration = dbs_info->flex_duration;
-		}
-		mutex_unlock(&flex_mutex);
-	}
-#endif /* CONFIG_CPU_FREQ_GOV_ONDEMAND_FLEXRATE */
 	schedule_delayed_work_on(cpu, &dbs_info->work, delay);
 	mutex_unlock(&dbs_info->timer_mutex);
 }
@@ -727,7 +691,7 @@ static int cpufreq_governor_dbs(struct cpufreq_policy *policy,
 		}
 		this_dbs_info->cpu = cpu;
 		this_dbs_info->rate_mult = 1;
-		ondemand_powersave_bias_init_cpu(cpu);
+		ondemandx_powersave_bias_init_cpu(cpu);
 		/*
 		 * Start the timerschedule work, when this governor
 		 * is used for first time
@@ -758,6 +722,8 @@ static int cpufreq_governor_dbs(struct cpufreq_policy *policy,
 
 		mutex_init(&this_dbs_info->timer_mutex);
 		dbs_timer_init(this_dbs_info);
+                register_early_suspend(&ondemandx_power_suspend);
+                pr_info("[imoseyon] ondemandx active\n");
 		break;
 
 	case CPUFREQ_GOV_STOP:
@@ -770,7 +736,8 @@ static int cpufreq_governor_dbs(struct cpufreq_policy *policy,
 		if (!dbs_enable)
 			sysfs_remove_group(cpufreq_global_kobject,
 					   &dbs_attr_group);
-
+                unregister_early_suspend(&ondemandx_power_suspend);
+                pr_info("[imoseyon] ondemandx inactive\n");
 		break;
 
 	case CPUFREQ_GOV_LIMITS:
@@ -812,237 +779,27 @@ static int __init cpufreq_gov_dbs_init(void)
 			MIN_SAMPLING_RATE_RATIO * jiffies_to_usecs(10);
 	}
 
-	return cpufreq_register_governor(&cpufreq_gov_ondemand);
+        pr_info("[imoseyon] ondemandx enter\n");
+	return cpufreq_register_governor(&cpufreq_gov_ondemandx);
 }
 
 static void __exit cpufreq_gov_dbs_exit(void)
 {
-	cpufreq_unregister_governor(&cpufreq_gov_ondemand);
+        pr_info("[imoseyon] ondemandx exit\n");
+	cpufreq_unregister_governor(&cpufreq_gov_ondemandx);
 }
-
-#ifdef CONFIG_CPU_FREQ_GOV_ONDEMAND_FLEXRATE
-static unsigned int max_duration =
-		(CONFIG_CPU_FREQ_GOV_ONDEMAND_FLEXRATE_MAX_DURATION);
-#define DEFAULT_DURATION	(5)
-static unsigned int sysfs_duration = DEFAULT_DURATION;
-static bool flexrate_enabled = true;
-static unsigned int forced_rate;
-static unsigned int flexrate_num_effective;
-
-static int cpufreq_ondemand_flexrate_do(struct cpufreq_policy *policy,
-					bool now)
-{
-	unsigned int cpu = policy->cpu;
-	bool using_ondemand;
-	struct cpu_dbs_info_s *dbs_info = &per_cpu(od_cpu_dbs_info, cpu);
-
-	WARN(!mutex_is_locked(&flex_mutex), "flex_mutex not locked\n");
-
-	dbs_info->flex_duration = dbs_tuners_ins.flex_duration;
-
-	if (now) {
-		flexrate_num_effective++;
-
-		mutex_lock(&dbs_mutex);
-		using_ondemand = dbs_enable && !strncmp(policy->governor->name, "ondemand", 8);
-		mutex_unlock(&dbs_mutex);
-
-		if (!using_ondemand)
-			return 0;
-
-		mutex_unlock(&flex_mutex);
-		mutex_lock(&dbs_info->timer_mutex);
-
-		/* Do It! */
-		cancel_delayed_work_sync(&dbs_info->work);
-		schedule_delayed_work_on(cpu, &dbs_info->work, 1);
-
-		mutex_unlock(&dbs_info->timer_mutex);
-		mutex_lock(&flex_mutex);
-	}
-
-	return 0;
-}
-
-int cpufreq_ondemand_flexrate_request(unsigned int rate_us,
-				      unsigned int duration)
-{
-	int err = 0;
-
-	if (!flexrate_enabled)
-		return 0;
-
-	if (forced_rate)
-		rate_us = forced_rate;
-
-	mutex_lock(&flex_mutex);
-
-	/* Unnecessary requests are dropped */
-	if (rate_us >= dbs_tuners_ins.sampling_rate)
-		goto out;
-	if (rate_us >= dbs_tuners_ins.flex_sampling_rate &&
-	    duration <= dbs_tuners_ins.flex_duration)
-		goto out;
-
-	duration = min(max_duration, duration);
-	if (rate_us > 0 && rate_us < min_sampling_rate)
-		rate_us = min_sampling_rate;
-
-	err = 1; /* Need update */
-
-	/* Cancel the active flexrate requests */
-	if (rate_us == 0 || duration == 0) {
-		dbs_tuners_ins.flex_duration = 0;
-		dbs_tuners_ins.flex_sampling_rate = 0;
-		goto out;
-	}
-
-	if (dbs_tuners_ins.flex_sampling_rate == 0 ||
-	    dbs_tuners_ins.flex_sampling_rate > rate_us)
-		err = 2; /* Need to poll faster */
-
-	/* Set new flexrate per the request */
-	dbs_tuners_ins.flex_sampling_rate =
-		min(dbs_tuners_ins.flex_sampling_rate, rate_us);
-	dbs_tuners_ins.flex_duration =
-		max(dbs_tuners_ins.flex_duration, duration);
-out:
-	/* Apply new flexrate */
-	if (err > 0) {
-		bool now = (err == 2);
-		int cpu = 0;
-
-		/* TODO: For every CPU using ONDEMAND */
-		err = cpufreq_ondemand_flexrate_do(cpufreq_cpu_get(cpu), now);
-	}
-	mutex_unlock(&flex_mutex);
-	return err;
-}
-EXPORT_SYMBOL_GPL(cpufreq_ondemand_flexrate_request);
-
-static ssize_t store_flexrate_request(struct kobject *a, struct attribute *b,
-				      const char *buf, size_t count)
-{
-	unsigned int rate;
-	int ret;
-
-	ret = sscanf(buf, "%u", &rate);
-	if (ret != 1)
-		return -EINVAL;
-
-	ret = cpufreq_ondemand_flexrate_request(rate, sysfs_duration);
-	if (ret)
-		return ret;
-	return count;
-}
-
-static ssize_t show_flexrate_request(struct kobject *a, struct attribute *b,
-				     char *buf)
-{
-	return sprintf(buf, "Flexrate decreases CPUFreq Ondemand governor's polling rate temporaily.\n"
-			    "Usage Example:\n"
-			    "# echo 8 > flexrate_duration\n"
-			    "# echo 10000 > flexrate_request\n"
-			    "With the second statement, Ondemand polls with 10ms(10000us) interval 8 times.\n"
-			    "run \"echo flexrate_duration\" to see the currecnt duration setting.\n");
-}
-
-static ssize_t store_flexrate_duration(struct kobject *a, struct attribute *b,
-				       const char *buf, size_t count)
-{
-	unsigned int duration;
-	int ret;
-
-	/* mutex not needed for flexrate_sysfs_duration */
-	ret = sscanf(buf, "%u", &duration);
-	if (ret != 1)
-		return -EINVAL;
-
-	if (duration == 0)
-		duration = DEFAULT_DURATION;
-	if (duration > max_duration)
-		duration = max_duration;
-
-	sysfs_duration = duration;
-	return count;
-}
-
-static ssize_t show_flexrate_duration(struct kobject *a, struct attribute *b,
-				      char *buf)
-{
-	return sprintf(buf, "%d\n", sysfs_duration);
-}
-
-static ssize_t store_flexrate_enable(struct kobject *a, struct attribute *b,
-				     const char *buf, size_t count)
-{
-	unsigned int input;
-	int ret;
-
-	ret = sscanf(buf, "%u", &input);
-	if (ret != 1)
-		return -EINVAL;
-
-	if (input > 0)
-		flexrate_enabled = true;
-	else
-		flexrate_enabled = false;
-
-	return count;
-}
-
-static ssize_t show_flexrate_enable(struct kobject *a, struct attribute *b,
-				    char *buf)
-{
-	return sprintf(buf, "%d\n", !!flexrate_enabled);
-}
-
-static ssize_t store_flexrate_forcerate(struct kobject *a, struct attribute *b,
-					 const char *buf, size_t count)
-{
-	unsigned int rate;
-	int ret;
-
-	ret = sscanf(buf, "%u", &rate);
-	if (ret != 1)
-		return -EINVAL;
-
-	forced_rate = rate;
-
-	pr_info("CAUTION: flexrate_forcerate is for debugging/benchmarking only.\n");
-	return count;
-}
-
-static ssize_t show_flexrate_forcerate(struct kobject *a, struct attribute *b,
-					char *buf)
-{
-	return sprintf(buf, "%u\n", forced_rate);
-}
-
-static ssize_t show_flexrate_num_effective_usage(struct kobject *a,
-						 struct attribute *b,
-						 char *buf)
-{
-	return sprintf(buf, "%u\n", flexrate_num_effective);
-}
-
-define_one_global_rw(flexrate_request);
-define_one_global_rw(flexrate_duration);
-define_one_global_rw(flexrate_enable);
-define_one_global_rw(flexrate_forcerate);
-define_one_global_ro(flexrate_num_effective_usage);
-#endif
 
 
 MODULE_AUTHOR("Venkatesh Pallipadi <venkatesh.pallipadi@intel.com>");
 MODULE_AUTHOR("Alexey Starikovskiy <alexey.y.starikovskiy@intel.com>");
-MODULE_DESCRIPTION("'cpufreq_ondemand' - A dynamic cpufreq governor for "
+MODULE_DESCRIPTION("'cpufreq_ondemandx' - A dynamic cpufreq governor for "
 	"Low Latency Frequency Transition capable processors");
 MODULE_LICENSE("GPL");
 
-#ifdef CONFIG_CPU_FREQ_DEFAULT_GOV_ONDEMAND
+#ifdef CONFIG_CPU_FREQ_DEFAULT_GOV_ONDEMANDX
 fs_initcall(cpufreq_gov_dbs_init);
 #else
 module_init(cpufreq_gov_dbs_init);
 #endif
 module_exit(cpufreq_gov_dbs_exit);
+
