@@ -1,7 +1,9 @@
-#!/bin/bash
+####################################
+#  SH KOR Galaxy S Series Project  #
+#  Hoppin, CM9 ICS                 #
+#  By Sunghun.Ra                   #
+#     http://theteamdev.com        #
+####################################
 
-export ARCH=arm
-export CROSS_COMPILE=/opt/toolchains/arm-eabi-4.4.3/bin/arm-eabi-
-
-make aries_kor_defconfig
+make say_defconfig
 make
