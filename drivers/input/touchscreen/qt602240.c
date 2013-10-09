@@ -36,7 +36,6 @@ struct qt602240_data *qt602240 = NULL;
                                        //botton_right    botton_left            center              top_right          top_left 
 unsigned char test_node[TEST_POINT_NUM] = {12,                  20,            104,                    188,                    196};        
 
-int test_node_value = 0 ;
 unsigned int return_refer_0, return_refer_1, return_refer_2, return_refer_3, return_refer_4;
 unsigned int return_delta_0, return_delta_1, return_delta_2, return_delta_3, return_delta_4;
 uint16_t diagnostic_addr;
@@ -2532,11 +2531,14 @@ void TSP_forced_release(void)
 
         fingerInfo[i].pressure = 0;
 
+      if (fingerInfo[i].pressure > 0) {
         input_report_abs(qt602240->input_dev, ABS_MT_POSITION_X, fingerInfo[i].x);
         input_report_abs(qt602240->input_dev, ABS_MT_POSITION_Y, fingerInfo[i].y);
-        input_report_abs(qt602240->input_dev, ABS_MT_TOUCH_MAJOR, fingerInfo[i].pressure);    // 0Ì¸ Release, Æ´Ï¸ Press (Down or Move)
-        input_report_abs(qt602240->input_dev, ABS_MT_WIDTH_MAJOR, fingerInfo[i].size);   
+		input_report_abs(qt602240->input_dev, ABS_MT_PRESSURE, fingerInfo[i].pressure);    // 0? Release, ?? Press (Down or Move)
+		input_report_abs(qt602240->input_dev, ABS_MT_TOUCH_MAJOR, fingerInfo[i].size);    // (ID<<8) | Size
 	input_report_abs(qt602240->input_dev, ABS_MT_TRACKING_ID, i); // i = Finger ID 
+        input_report_key(qt602240->input_dev, BTN_TOUCH, 1);
+      }
         input_mt_sync(qt602240->input_dev);
 
         if ( fingerInfo[i].pressure == 0 ) fingerInfo[i].pressure= -1;
@@ -2560,11 +2562,14 @@ void TSP_forced_release_forOKkey(void)
 
         fingerInfo[i].pressure = 0;
 
+      if (fingerInfo[i].pressure > 0) {
         input_report_abs(qt602240->input_dev, ABS_MT_POSITION_X, fingerInfo[i].x);
         input_report_abs(qt602240->input_dev, ABS_MT_POSITION_Y, fingerInfo[i].y);
-        input_report_abs(qt602240->input_dev, ABS_MT_TOUCH_MAJOR, fingerInfo[i].pressure);    // 0Ì¸ Release, Æ´Ï¸ Press (Down or Move)
-        input_report_abs(qt602240->input_dev, ABS_MT_WIDTH_MAJOR, fingerInfo[i].size); 
+		input_report_abs(qt602240->input_dev, ABS_MT_PRESSURE, fingerInfo[i].pressure);    // 0? Release, ?? Press (Down or Move)
+		input_report_abs(qt602240->input_dev, ABS_MT_TOUCH_MAJOR, fingerInfo[i].size);    // (ID<<8) | Size
 		input_report_abs(qt602240->input_dev, ABS_MT_TRACKING_ID, i); // i = Finger ID 
+        input_report_key(qt602240->input_dev, BTN_TOUCH, 1);
+      }
         input_mt_sync(qt602240->input_dev);
 
         if ( fingerInfo[i].pressure == 0 ) fingerInfo[i].pressure= -1;
@@ -2607,11 +2612,14 @@ void TSP_forced_release_for_call(void)
 		calibrate_chip();
 		msleep(20);	
 
+      if (fingerInfo[i].pressure > 0) {
 		input_report_abs(qt602240->input_dev, ABS_MT_POSITION_X, fingerInfo[i].x);
 		input_report_abs(qt602240->input_dev, ABS_MT_POSITION_Y, fingerInfo[i].y);
-		input_report_abs(qt602240->input_dev, ABS_MT_TOUCH_MAJOR, fingerInfo[i].pressure);	// 0ÀÌ¸é Release, ¾Æ´Ï¸é Press »óÅÂ(Down or Move)
-        input_report_abs(qt602240->input_dev, ABS_MT_WIDTH_MAJOR, fingerInfo[i].size); // (ID<<8) | Size
+		input_report_abs(qt602240->input_dev, ABS_MT_PRESSURE, fingerInfo[i].pressure);    // 0? Release, ?? Press (Down or Move)
+		input_report_abs(qt602240->input_dev, ABS_MT_TOUCH_MAJOR, fingerInfo[i].size);    // (ID<<8) | Size
 		input_report_abs(qt602240->input_dev, ABS_MT_TRACKING_ID, i); // i = Finger ID 		
+        input_report_key(qt602240->input_dev, BTN_TOUCH, 1);
+      }
 		input_mt_sync(qt602240->input_dev);
 
 		if ( fingerInfo[i].pressure == 0 ) fingerInfo[i].pressure= -1;
@@ -2660,11 +2668,14 @@ void  get_message(void)
                             touch_state_val=0;
                         }
                         fingerInfo[i].pressure= 0;
+                          if (fingerInfo[i].pressure > 0) {
                         input_report_abs(qt602240->input_dev, ABS_MT_POSITION_X, fingerInfo[i].x);
                         input_report_abs(qt602240->input_dev, ABS_MT_POSITION_Y, fingerInfo[i].y);
-                        input_report_abs(qt602240->input_dev, ABS_MT_TOUCH_MAJOR, fingerInfo[i].pressure);    // 0Ì¸ Release, Æ´Ï¸ Press (Down or Move)
-                        input_report_abs(qt602240->input_dev, ABS_MT_WIDTH_MAJOR, fingerInfo[i].size);
+                        input_report_abs(qt602240->input_dev, ABS_MT_PRESSURE, fingerInfo[i].pressure);    // 0? Release, ?? Press (Down or Move)
+						input_report_abs(qt602240->input_dev, ABS_MT_TOUCH_MAJOR, fingerInfo[i].size);    // (ID<<8) | Size
 						input_report_abs(qt602240->input_dev, ABS_MT_TRACKING_ID, i); // i = Finger ID 
+						input_report_key(qt602240->input_dev, BTN_TOUCH, 1);
+									}
                         input_mt_sync(qt602240->input_dev);
             
                         if ( fingerInfo[i].pressure == 0 ) fingerInfo[i].pressure= -1;
@@ -2793,11 +2804,14 @@ void  get_message(void)
         for ( i= 0; i<MAX_USING_FINGER_NUM; ++i ) {
             if ( fingerInfo[i].pressure == -1 ) continue;
 
+				  if (fingerInfo[i].pressure > 0) {
             input_report_abs(qt602240->input_dev, ABS_MT_POSITION_X, fingerInfo[i].x);
             input_report_abs(qt602240->input_dev, ABS_MT_POSITION_Y, fingerInfo[i].y);
-            input_report_abs(qt602240->input_dev, ABS_MT_TOUCH_MAJOR, fingerInfo[i].pressure);    // 0Ì¸ Release, Æ´Ï¸ Press (Down or Move)
-            input_report_abs(qt602240->input_dev, ABS_MT_WIDTH_MAJOR, fingerInfo[i].size);
+			input_report_abs(qt602240->input_dev, ABS_MT_PRESSURE, fingerInfo[i].pressure);    // 0? Release, ?? Press (Down or Move)
+			input_report_abs(qt602240->input_dev, ABS_MT_TOUCH_MAJOR, fingerInfo[i].size);    // (ID<<8) | Size
 			input_report_abs(qt602240->input_dev, ABS_MT_TRACKING_ID, i); // i = Finger ID 
+			input_report_key(qt602240->input_dev, BTN_TOUCH, 1);
+                      }
             input_mt_sync(qt602240->input_dev);
 
             if ( fingerInfo[i].pressure == 0 ) fingerInfo[i].pressure= -1;
@@ -3106,8 +3120,8 @@ int qt602240_probe(struct i2c_client *client,
     input_set_abs_params(qt602240->input_dev, ABS_PRESSURE, 0, 255, 0, 0);
     input_set_abs_params(qt602240->input_dev, ABS_TOOL_WIDTH, 0, 15, 0, 0);
 #ifdef _SUPPORT_MULTITOUCH_
-    input_set_abs_params(qt602240->input_dev, ABS_MT_TOUCH_MAJOR, 0, 255, 0, 0);
-    input_set_abs_params(qt602240->input_dev, ABS_MT_WIDTH_MAJOR, 0, 30, 0, 0);
+    input_set_abs_params(qt602240->input_dev, ABS_MT_PRESSURE, 0, 255, 0, 0);
+    input_set_abs_params(qt602240->input_dev, ABS_MT_TOUCH_MAJOR, 0, 30, 0, 0);
 	input_set_abs_params(qt602240->input_dev, ABS_MT_TRACKING_ID, 0, MAX_USING_FINGER_NUM-1, 0, 0);
 
 #endif    
@@ -4041,11 +4055,6 @@ static ssize_t set_touchscreen_store(struct device *dev, struct device_attribute
         dprintk("[TSP] Configuration Fail!!! , Line %d \n\r", __LINE__);
     }
 
-	if((cmd_no == 0) && (config_value == 143))
-	{
-		msleep(50);
-		TSP_forced_release_forOKkey();
-	}
     return size;
 }
 static DEVICE_ATTR(set_touchscreen, 0664, set_touchscreen_show, set_touchscreen_store);
@@ -4812,48 +4821,6 @@ static ssize_t set_delta4_mode_show(struct device *dev, struct device_attribute 
     }
 }
 
-static ssize_t set_refer_mode_show(struct device *dev, struct device_attribute *attr, char *buf)
-{
-    unsigned char status;
-    uint16_t qt_refrence=0;
-
-	status = read_dbg_data(QT_REFERENCE_MODE, test_node_value,&qt_refrence);
-	return sprintf(buf, "%u\n", qt_refrence);	
-}
-
-static ssize_t set_refer_mode_store(struct device *dev, struct device_attribute *attr,	const char *buf, size_t size)
-{
-	char *after;
-
-	test_node_value = simple_strtoul(buf, &after, 10);	
-
-	return size;
-}
-
-static ssize_t set_delta_mode_show(struct device *dev, struct device_attribute *attr, char *buf)
-{
-    unsigned char status;
-    uint16_t qt_delta=0;
-
-	status = read_dbg_data(QT_DELTA_MODE, test_node_value,&qt_delta);
-	if(qt_delta < 32767){
-		return sprintf(buf, "%u\n", qt_delta);	
-	   }
-	else	{
-			qt_delta = 65535 - qt_delta;
-		return sprintf(buf, "-%u\n", qt_delta);	
-	}
-}
-
-static ssize_t set_delta_mode_store(struct device *dev, struct device_attribute *attr,	const char *buf, size_t size)
-{
-	char *after;
-
-	test_node_value = simple_strtoul(buf, &after, 10);	
-
-	return size;
-}
-
 static ssize_t set_delta_minmax_show(struct device *dev, struct device_attribute *attr, char *buf)
 {
     unsigned char status;
@@ -4889,16 +4856,10 @@ static ssize_t set_delta_minmax_show(struct device *dev, struct device_attribute
 static ssize_t set_all_refer_mode_show(struct device *dev, struct device_attribute *attr, char *buf)
 {
     int status = 0;
-	int i = 0;
-		
-	for(i=0 ; i<3 ; i++)
-	{
-		status = read_all_data(QT_REFERENCE_MODE);
-		if(status == 0)
-			break;
-	}
+	
+	status = read_all_data(QT_REFERENCE_MODE);
 
-	return sprintf(buf, "%u\n", status);
+	return sprintf(buf, "%u\n", status);	
 }
 
 static ssize_t set_threshold_mode_show(struct device *dev, struct device_attribute *attr, char *buf)
@@ -4917,8 +4878,6 @@ static DEVICE_ATTR(set_refer3, 0664, set_refer3_mode_show, NULL);
 static DEVICE_ATTR(set_delta3, 0664, set_delta3_mode_show, NULL);
 static DEVICE_ATTR(set_refer4, 0664, set_refer4_mode_show, NULL);
 static DEVICE_ATTR(set_delta4, 0664, set_delta4_mode_show, NULL);
-static DEVICE_ATTR(set_refer, 0664, set_refer_mode_show, set_refer_mode_store);
-static DEVICE_ATTR(set_delta, 0664, set_delta_mode_show, set_delta_mode_store);
 static DEVICE_ATTR(set_referminmax, 0664, set_refer_minmax_show, NULL);
 static DEVICE_ATTR(set_deltaminmax, 0664, set_delta_minmax_show, NULL);
 static DEVICE_ATTR(set_all_refer, 0664, set_all_refer_mode_show, NULL);
@@ -5286,10 +5245,6 @@ int __init qt602240_init(void)
         dprintk("Failed to create device file(%s)!\n", dev_attr_set_refer4.attr.name);
     if (device_create_file(qt602240_noise_test, &dev_attr_set_delta4) < 0)
         dprintk("Failed to create device file(%s)!\n", dev_attr_set_delta4.attr.name);    
-	if (device_create_file(qt602240_noise_test, &dev_attr_set_refer)< 0)
-		printk("Failed to create device file(%s)!\n", dev_attr_set_refer.attr.name);
-	if (device_create_file(qt602240_noise_test, &dev_attr_set_delta) < 0)
-		printk("Failed to create device file(%s)!\n", dev_attr_set_delta.attr.name);
 	if (device_create_file(qt602240_noise_test, &dev_attr_set_referminmax)< 0)
         	printk("Failed to create device file(%s)!\n", 
         	dev_attr_set_referminmax.attr.name);
