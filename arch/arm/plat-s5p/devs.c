@@ -88,6 +88,11 @@ static char *usb_functions_acm_ums_adb[] = {
 	"adb",
 };
 
+static char *usb_functions_rndis_ums_adb[] = {
+	"rndis",
+	"usb_mass_storage",
+	"adb",
+};
 /* debug mode - kor */
 static char *usb_functions_ums_acm_adb[] = {
 	"usb_mass_storage",
@@ -131,7 +136,6 @@ static char *usb_functions_all[] = {
 #ifdef CONFIG_USB_ANDROID_ACCESSORY	
 	"accessory",
 #endif	
-	"mtp"
 #else	/* S1-EUR */
 	"acm",
 	"usb_mass_storage",
@@ -207,6 +211,7 @@ static struct android_usb_product usb_products[] = {
 		.s		= ANDROID_RNDIS_CONFIG_STRING,
 		.mode		= USBSTATUS_VTP,
 	},
+#ifdef CONFIG_USB_ANDROID_ACCESSORY	
 	{
 		.vendor_id	= USB_ACCESSORY_VENDOR_ID,
 		.product_id	= USB_ACCESSORY_PRODUCT_ID,
@@ -218,15 +223,16 @@ static struct android_usb_product usb_products[] = {
 		.s		= ANDROID_ACC_CONFIG_STRING,
 		.mode		= USBSTATUS_ACCESSORY,
 	},
+#endif
 	{
-		.product_id = SAMSUNG_MTP_PRODUCT_ID,
-		.num_functions	= ARRAY_SIZE(usb_functions_mtp),
-		.functions	= usb_functions_mtp,
-		.bDeviceClass	= USB_CLASS_PER_INTERFACE,
+		.product_id     = SAMSUNG_DEBUG_PRODUCT_ID,
+		.num_functions  = ARRAY_SIZE(usb_functions_rndis_ums_adb),
+		.functions      = usb_functions_rndis_ums_adb,
+		.bDeviceClass   = USB_CLASS_COMM,
 		.bDeviceSubClass= 0,
-		.bDeviceProtocol= 0x01,
-		.s		= ANDROID_MTP_CONFIG_STRING,
-		.mode		= USBSTATUS_MTPONLY,
+		.bDeviceProtocol= 0,
+		.s              = ANDROID_DEBUG_CONFIG_STRING,
+		.mode           = USBSTATUS_ADB_RNDIS,
 	},
 #else	/* S1-EUR-Config */
 	{
